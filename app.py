@@ -1,92 +1,114 @@
 import streamlit as st
 import qrcode
+import pandas as pd
 from io import BytesIO
-from reportlab.lib.pagesizes import A4
-from reportlab.pdfgen import canvas
+import os
+from zipfile import ZipFile
+from PIL import Image
+import fitz  # PyMuPDF
 
-# Diretório e nome do PDF final
-PDF_FILE = "qrcodes_todas_caixas.pdf"
+# Garante que a pasta 'qrcodes' exista
+os.makedirs("qrcodes", exist_ok=True)
 
-# Inicializa variáveis de sessão
+st.set_page_config(page_title="📱 Coleta IMEI - QR Code", layout="centered")
+
+# Sessão para armazenar dados
 if "caixas" not in st.session_state:
-    st.session_state.caixas = {}
-if "caixa_atual" not in st.session_state:
-    st.session_state.caixa_atual = ""
-if "imeis_atual" not in st.session_state:
-    st.session_state.imeis_atual = []
+    st.session_state["caixas"] = {}
 
-# Título do app
-st.title("📦 Coletor de IMEIs por Caixa com QR Code")
+st.title("📦 Coleta de IMEIs e Geração de QR Code")
 
-# Campo para bipar código master da caixa
-caixa_input = st.text_input("🔢 Bipar código master da caixa", key="caixa_input")
-if caixa_input:
-    st.session_state.caixa_atual = caixa_input
-    st.session_state.imeis_atual = []
-    st.session_state.caixas[caixa_input] = []
-    st.experimental_rerun()
+# Bipar código master para iniciar nova caixa
+codigo_master = st.text_input("📌 Bipar Código Master da Caixa")
 
-# Exibe caixa atual
-if st.session_state.caixa_atual:
-    st.subheader(f"📦 Caixa atual: {st.session_state.caixa_atual}")
+if codigo_master:
+    if codigo_master not in st.session_state["caixas"]:
+        st.session_state["caixas"][codigo_master] = []
+        st.success(f"✅ Nova caixa criada: {codigo_master}")
 
-    # Campo para adicionar IMEI
-    imei_input = st.text_input("📱 Digite IMEI", key="imei_input")
-    if imei_input:
-        st.session_state.imeis_atual.append(imei_input)
-        st.session_state.caixas[st.session_state.caixa_atual] = st.session_state.imeis_atual
-        st.experimental_rerun()
+# Selecionar caixa ativa
+caixas_disponiveis = list(st.session_state["caixas"].keys())
+if caixas_disponiveis:
+    caixa_atual = st.selectbox("📦 Selecione a caixa", caixas_disponiveis)
+else:
+    caixa_atual = None
 
-    # Lista de IMEIs adicionados
-    st.write("📋 IMEIs adicionados:")
-    for imei in st.session_state.imeis_atual:
-        st.write(f"- {imei}")
+# Adicionar IMEIs
+if caixa_atual:
+    imei = st.text_input("📲 Digite ou bipar IMEI")
+    if st.button("➕ Adicionar IMEI"):
+        if imei and imei not in st.session_state["caixas"][caixa_atual]:
+            st.session_state["caixas"][caixa_atual].append(imei)
+            st.success(f"📲 IMEI {imei} adicionado na caixa {caixa_atual}")
+        else:
+            st.warning("⚠️ IMEI inválido ou já adicionado!")
 
-    # Botão para finalizar caixa
-    if st.button("✅ Finalizar Caixa"):
-        st.session_state.caixa_atual = ""
-        st.session_state.imeis_atual = []
-        st.experimental_rerun()
+    # Mostrar lista
+    st.subheader(f"📋 IMEIs da {caixa_atual}")
+    st.write(st.session_state["caixas"][caixa_atual])
 
-# Função para gerar QR Code como imagem
-def gerar_qr_code(data):
-    qr = qrcode.QRCode(box_size=10, border=2)
-    qr.add_data(data)
-    qr.make(fit=True)
-    img = qr.make_image()
-    buf = BytesIO()
-    img.save(buf, format="PNG")
-    buf.seek(0)
-    return buf
+    # Gerar QR Code
+    if st.button("🎯 Gerar QR Code da Caixa"):
+        dados = "\n".join(st.session_state["caixas"][caixa_atual])
+        if not dados:
+            st.warning("⚠️ Nenhum IMEI na caixa para gerar QR Code!")
+        else:
+            img = qrcode.make(dados)
+            buffer = BytesIO()
+            img.save(buffer, format="PNG")
 
-# Função para gerar PDF com QR Codes
-def gerar_pdf(caixas):
-    buffer = BytesIO()
-    c = canvas.Canvas(buffer, pagesize=A4)
-    width, height = A4
-    x, y = 50, height - 100
-    count = 0
+            st.image(buffer, caption=f"QR Code - {caixa_atual}")
+            st.download_button("📥 Baixar QR Code", buffer.getvalue(), file_name=f"{caixa_atual}.png")
 
-    for caixa, imeis in caixas.items():
-        qr_data = "\n".join(imeis)
-        qr_img = gerar_qr_code(qr_data)
-        c.drawImage(qr_img, x, y, width=100, height=100)
-        c.drawString(x, y - 15, f"Caixa: {caixa}")
-        x += 150
-        count += 1
-        if count % 5 == 0:
-            x = 50
-            y -= 150
-        if count % 10 == 0:
-            c.showPage()
-            x, y = 50, height - 100
+# Botão para exportar todas as caixas em Excel
+if st.session_state["caixas"]:
+    if st.button("📊 Exportar todas as caixas para Excel"):
+        linhas = []
+        for caixa, imeis in st.session_state["caixas"].items():
+            for imei in imeis:
+                linhas.append({"Caixa": caixa, "IMEI": imei})
+        df = pd.DataFrame(linhas)
 
-    c.save()
-    buffer.seek(0)
-    return buffer
+        excel_buffer = BytesIO()
+        with pd.ExcelWriter(excel_buffer, engine="xlsxwriter") as writer:
+            df.to_excel(writer, index=False, sheet_name="IMEIs")
+        st.download_button(
+            "📥 Baixar Excel",
+            excel_buffer.getvalue(),
+            file_name="imeis_coletados.xlsx",
+        )
 
-# Botão para gerar PDF com todos os QR Codes
-if st.button("📄 Gerar PDF com todos os QR Codes"):
-    pdf_buffer = gerar_pdf(st.session_state.caixas)
-    st.download_button("📥 Baixar PDF", data=pdf_buffer, file_name=PDF_FILE, mime="application/pdf")
+    # Gerar PDF com QR Codes e compactar em ZIP
+    if st.button("📄 Gerar PDF + ZIP com QR Codes"):
+        caixas_selecionadas = list(st.session_state["caixas"].items())[:10]
+        imagens_qr = []
+        pdf_doc = fitz.open()
 
+        for caixa, imeis in caixas_selecionadas:
+            dados = "\n".join(imeis)
+            img = qrcode.make(dados)
+            img_path = f"qrcodes/{caixa}.png"
+            img.save(img_path)
+            imagens_qr.append(img_path)
+
+            page = pdf_doc.new_page(width=595, height=842)  # A4
+            rect = fitz.Rect(100, 100, 495, 495)
+            page.insert_image(rect, filename=img_path)
+            page.insert_text((100, 70), f"Caixa: {caixa}", fontsize=14)
+
+        pdf_buffer = BytesIO()
+        pdf_doc.save(pdf_buffer)
+        pdf_doc.close()
+
+        zip_buffer = BytesIO()
+        with ZipFile(zip_buffer, "w") as zipf:
+            zipf.writestr("qrcodes.pdf", pdf_buffer.getvalue())
+            for img_path in imagens_qr:
+                with open(img_path, "rb") as f:
+                    zipf.writestr(os.path.basename(img_path), f.read())
+
+        st.download_button(
+            "📦 Baixar ZIP com QR Codes e PDF",
+            zip_buffer.getvalue(),
+            file_name="qrcodes_caixas.zip",
+        )
