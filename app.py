@@ -5,7 +5,8 @@ from io import BytesIO
 import os
 from zipfile import ZipFile
 from PIL import Image
-import fitz  # PyMuPDF
+from reportlab.lib.pagesizes import A4
+from reportlab.pdfgen import canvas
 
 # Garante que a pasta 'qrcodes' exista
 os.makedirs("qrcodes", exist_ok=True)
@@ -60,7 +61,7 @@ if caixa_atual:
             st.image(buffer, caption=f"QR Code - {caixa_atual}")
             st.download_button("📥 Baixar QR Code", buffer.getvalue(), file_name=f"{caixa_atual}.png")
 
-# Botão para exportar todas as caixas em Excel
+# Exportar todas as caixas para Excel
 if st.session_state["caixas"]:
     if st.button("📊 Exportar todas as caixas para Excel"):
         linhas = []
@@ -78,12 +79,12 @@ if st.session_state["caixas"]:
             file_name="imeis_coletados.xlsx",
         )
 
-    # Gerar PDF com QR Codes e compactar em ZIP
+    # Gerar PDF + ZIP
     if st.button("📄 Gerar PDF + ZIP com QR Codes"):
         caixas_selecionadas = list(st.session_state["caixas"].items())[:10]
         imagens_qr = []
-        pdf_doc = fitz.open()
 
+        # Gerar imagens dos QR Codes
         for caixa, imeis in caixas_selecionadas:
             dados = "\n".join(imeis)
             img = qrcode.make(dados)
@@ -91,15 +92,21 @@ if st.session_state["caixas"]:
             img.save(img_path)
             imagens_qr.append(img_path)
 
-            page = pdf_doc.new_page(width=595, height=842)  # A4
-            rect = fitz.Rect(100, 100, 495, 495)
-            page.insert_image(rect, filename=img_path)
-            page.insert_text((100, 70), f"Caixa: {caixa}", fontsize=14)
-
+        # Criar PDF com ReportLab
         pdf_buffer = BytesIO()
-        pdf_doc.save(pdf_buffer)
-        pdf_doc.close()
+        c = canvas.Canvas(pdf_buffer, pagesize=A4)
+        width, height = A4
 
+        for img_path in imagens_qr:
+            caixa_nome = os.path.splitext(os.path.basename(img_path))[0]
+            c.setFont("Helvetica-Bold", 16)
+            c.drawString(100, height - 100, f"Caixa: {caixa_nome}")
+            c.drawImage(img_path, 100, height - 500, width=300, height=300)
+            c.showPage()
+
+        c.save()
+
+        # Criar ZIP
         zip_buffer = BytesIO()
         with ZipFile(zip_buffer, "w") as zipf:
             zipf.writestr("qrcodes.pdf", pdf_buffer.getvalue())
