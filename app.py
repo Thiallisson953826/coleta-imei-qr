@@ -8,12 +8,12 @@ from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen import canvas
 import re
 
-# Cria pastas se não existirem
+# Pastas de saída
 os.makedirs("qrcodes", exist_ok=True)
 
 st.set_page_config(page_title="📱 Coleta IMEI - QR Code", layout="centered")
 
-# Sessão para armazenar dados
+# Inicializar sessão
 if "caixas" not in st.session_state:
     st.session_state["caixas"] = {}
 
@@ -21,7 +21,9 @@ st.title("📦 Coleta de IMEIs e Geração de QR Code")
 
 # Função para limpar IMEI (ignora prefixos, pega só números)
 def limpar_imei(raw):
-    return re.sub(r"\D", "", raw)
+    # Remove tudo que não seja número
+    numeros = re.findall(r'\d+', raw)
+    return numeros  # Retorna lista de números
 
 # Bipar código master para iniciar nova caixa
 codigo_master = st.text_input("📌 Bipar Código Master da Caixa")
@@ -36,23 +38,26 @@ caixa_atual = st.selectbox("📦 Selecione a caixa", caixas_disponiveis) if caix
 
 # Adicionar IMEIs
 if caixa_atual:
-    imei_raw = st.text_input("📲 Digite ou bipar IMEI")
-    if st.button("➕ Adicionar IMEI"):
-        imei = limpar_imei(imei_raw)
-        if imei and imei not in st.session_state["caixas"][caixa_atual]:
-            st.session_state["caixas"][caixa_atual].append(imei)
-            st.success(f"📲 IMEI {imei} adicionado na caixa {caixa_atual}")
-        else:
-            st.warning("⚠️ IMEI inválido ou já adicionado!")
+    imei_raw = st.text_area("📲 Digite ou bipar IMEIs (um por linha ou todos juntos)")
+    if st.button("➕ Adicionar IMEIs"):
+        if imei_raw:
+            # Limpar e separar IMEIs
+            novos_imeis = limpar_imei(imei_raw)
+            adicionados = 0
+            for imei in novos_imeis:
+                if imei not in st.session_state["caixas"][caixa_atual]:
+                    st.session_state["caixas"][caixa_atual].append(imei)
+                    adicionados += 1
+            st.success(f"📲 {adicionados} IMEIs adicionados na {caixa_atual}")
 
-    # Mostrar lista vertical de IMEIs
+    # Mostrar lista de IMEIs, um por linha
     st.subheader(f"📋 IMEIs da {caixa_atual}")
     st.text("\n".join(st.session_state["caixas"][caixa_atual]))
 
 # Gerar QR Code da caixa
 if caixa_atual and st.button("🎯 Gerar QR Code da Caixa"):
     if st.session_state["caixas"][caixa_atual]:
-        texto_qr = "\n".join(st.session_state["caixas"][caixa_atual])  # cada IMEI em linha separada
+        texto_qr = "\n".join(st.session_state["caixas"][caixa_atual])
         img = qrcode.make(texto_qr)
         buffer = BytesIO()
         img.save(buffer, format="PNG")
@@ -82,7 +87,7 @@ if st.session_state["caixas"] and st.button("📄 Gerar PDF + ZIP com QR Codes")
     for caixa, imeis in caixas_selecionadas:
         if not imeis:
             continue
-        dados = "\n".join(imeis)
+        dados = "\n".join(imeis)  # Cada IMEI em linha separada
         img = qrcode.make(dados)
         img_path = f"qrcodes/{caixa}.png"
         img.save(img_path)
