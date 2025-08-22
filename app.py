@@ -37,15 +37,22 @@ def gerar_pdf(caixas):
                 pdf.cell(200, 10, f"Caixa {caixa}", ln=True, align="C")
 
             filename = f"qrcodes/{caixa}_{imei}.png"
-            texto_qr = f"Caixa: {caixa}\n{imei}"
+            texto_qr = f"Caixa: {caixa}\nIMEI: {imei}"
             gerar_qrcode(texto_qr, filename)
 
-            x = 20 + ((i % 2) * 90)   # duas colunas
-            y = 30 + ((i % 10) // 2) * 50
+            # Cálculo de posição (2 colunas x 5 linhas = 10 por página)
+            col = (i % 10) % 2      # coluna (0 ou 1)
+            row = (i % 10) // 2     # linha (0 até 4)
+            x = 25 + col * 90       # espaçamento horizontal
+            y = 30 + row * 50       # espaçamento vertical
+
+            # Inserir QR
             pdf.image(filename, x=x, y=y, w=40, h=40)
+
+            # Inserir texto abaixo
             pdf.set_xy(x, y + 42)
             pdf.set_font("Arial", size=8)
-            pdf.cell(40, 10, imei, align="C")
+            pdf.multi_cell(40, 5, f"{caixa}\n{imei}", align="C")
 
     pdf_output = "pdfs/qrcodes_final.pdf"
     pdf.output(pdf_output)
