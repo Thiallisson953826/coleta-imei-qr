@@ -4,8 +4,7 @@ import pandas as pd
 from io import BytesIO
 import os
 from zipfile import ZipFile
-from reportlab.lib.pagesizes import A4
-from reportlab.pdfgen import canvas
+from fpdf import FPDF
 import re
 
 # Pastas de saída
@@ -75,33 +74,34 @@ if st.session_state["caixas"] and st.button("📄 Gerar PDF + ZIP com QR Codes")
         img.save(img_path)
         imagens_qr.append((img_path, caixa))
 
-    # Criar PDF
-    pdf_buffer = BytesIO()
-    c = canvas.Canvas(pdf_buffer, pagesize=A4)
-    width, height = A4
+    # Criar PDF com FPDF
+    pdf = FPDF("P", "mm", "A4")
+    pdf.set_auto_page_break(auto=False)
+    pdf.add_page()
 
-    qr_width = 200
-    qr_height = 200
-    margin_x = 60
-    margin_y = 60
-    gap_x = 80
-    gap_y = 60
+    qr_size = 60  # tamanho do QR
+    margin_x = 20
+    margin_y = 20
+    gap_x = 20
+    gap_y = 30
 
     positions = [(0,0),(1,0),(0,1),(1,1),(0,2),(1,2),(0,3),(1,3)]  # até 8 por página
 
     count = 0
     for img_path, caixa_nome in imagens_qr:
+        if count % 8 == 0 and count > 0:
+            pdf.add_page()
         pos = positions[count % 8]
-        x = margin_x + pos[0] * (qr_width + gap_x)
-        y = height - margin_y - (pos[1]+1)*(qr_height + gap_y)
-        c.drawImage(img_path, x, y, width=qr_width, height=qr_height)
-        c.setFont("Helvetica-Bold", 12)
-        c.drawCentredString(x + qr_width/2, y - 15, f"{caixa_nome}")
+        x = margin_x + pos[0] * (qr_size + gap_x)
+        y = margin_y + pos[1] * (qr_size + gap_y)
+        pdf.image(img_path, x=x, y=y, w=qr_size, h=qr_size)
+        pdf.set_xy(x, y + qr_size + 2)
+        pdf.set_font("Arial", "B", 10)
+        pdf.cell(qr_size, 6, caixa_nome, align="C")
         count += 1
-        if count % 8 == 0:
-            c.showPage()
 
-    c.save()
+    pdf_buffer = BytesIO()
+    pdf.output(pdf_buffer)
     pdf_buffer.seek(0)
 
     # Criar ZIP
@@ -118,4 +118,3 @@ if st.session_state["caixas"] and st.button("📄 Gerar PDF + ZIP com QR Codes")
         zip_buffer.getvalue(),
         file_name="qrcodes_caixas.zip",
     )
-
