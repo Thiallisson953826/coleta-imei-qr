@@ -54,7 +54,7 @@ if st.session_state["caixas"] and st.button("📊 Exportar todas as caixas para 
             linhas.append({"Caixa": caixa, "IMEI": imei})
     df = pd.DataFrame(linhas)
     excel_buffer = BytesIO()
-    with pd.ExcelWriter(excel_buffer, engine="xlsxwriter") as writer:
+    with pd.ExcelWriter(excel_buffer, engine="openpyxl") as writer:
         df.to_excel(writer, index=False, sheet_name="IMEIs")
     excel_buffer.seek(0)
     st.download_button("📥 Baixar Excel", excel_buffer.getvalue(), file_name="imeis_coletados.xlsx")
@@ -100,9 +100,9 @@ if st.session_state["caixas"] and st.button("📄 Gerar PDF + ZIP com QR Codes")
         pdf.cell(qr_size, 6, caixa_nome, align="C")
         count += 1
 
-    pdf_buffer = BytesIO()
-    pdf.output(pdf_buffer)
-    pdf_buffer.seek(0)
+    # ⚡ Corrigido para gerar em memória
+    pdf_bytes = pdf.output(dest="S").encode("latin1")
+    pdf_buffer = BytesIO(pdf_bytes)
 
     # Criar ZIP
     zip_buffer = BytesIO()
