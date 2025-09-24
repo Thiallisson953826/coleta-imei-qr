@@ -5,6 +5,7 @@ from io import BytesIO
 import zipfile
 from fpdf import FPDF
 import os
+import tempfile
 
 st.set_page_config(page_title="📱 Coleta IMEI - QR Code", layout="centered")
 st.title("📱 Gerador de QR Code para IMEIs")
@@ -45,16 +46,24 @@ if uploaded_file:
                 # Salva no ZIP
                 zip_file.writestr(f"{imei}.png", img_buffer.getvalue())
 
+                # Salva temporariamente para o PDF
+                with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as tmpfile:
+                    tmpfile.write(img_buffer.getvalue())
+                    tmp_path = tmpfile.name
+
                 # Adiciona ao PDF
                 x = x_positions[i % 2]
                 y = y_positions[(i // 2) % 3]
-                pdf.image(img_buffer, x=x, y=y, w=80, h=80)
+                pdf.image(tmp_path, x=x, y=y, w=80, h=80)
 
                 i += 1
 
                 # Nova página a cada 6 QR Codes
                 if i % 6 == 0 and idx + 1 < len(df["IMEI"]):
                     pdf.add_page()
+
+                # Remove imagem temporária
+                os.remove(tmp_path)
 
         # Exporta PDF
         pdf_buffer = BytesIO()
