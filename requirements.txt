@@ -1,3 +1,6 @@
 streamlit
-qrcode[pil]
+pandas
+qrcode
 fpdf
+xlsxwriter
+
