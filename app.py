@@ -32,15 +32,12 @@ if st.button("➕ Adicionar IMEIs"):
     if imei_raw:
         novos_imeis = limpar_imei(imei_raw)
         for imei in novos_imeis:
-            # Verifica se já existe a caixa atual
             nome_caixa = f"Caixa_{st.session_state['contador_caixa']}"
             if nome_caixa not in st.session_state["caixas"]:
                 st.session_state["caixas"][nome_caixa] = []
             
-            # Adiciona IMEI na caixa atual
             st.session_state["caixas"][nome_caixa].append(imei)
 
-            # Se a caixa atingir 50 IMEIs, abre nova
             if len(st.session_state["caixas"][nome_caixa]) >= 50:
                 st.session_state["contador_caixa"] += 1
         st.success(f"📲 {len(novos_imeis)} IMEIs adicionados com sucesso!")
@@ -60,6 +57,7 @@ if st.session_state["caixas"] and st.button("📊 Exportar todas as caixas para 
     excel_buffer = BytesIO()
     with pd.ExcelWriter(excel_buffer, engine="xlsxwriter") as writer:
         df.to_excel(writer, index=False, sheet_name="IMEIs")
+    excel_buffer.seek(0)
     st.download_button("📥 Baixar Excel", excel_buffer.getvalue(), file_name="imeis_coletados.xlsx")
 
 # Gerar PDF + ZIP com até 8 QR codes por página
@@ -89,7 +87,6 @@ if st.session_state["caixas"] and st.button("📄 Gerar PDF + ZIP com QR Codes")
     gap_x = 80
     gap_y = 60
 
-    positions = [(0,0),(1,0),(0,1),(1,1)]  # 2 colunas x 2 linhas por "bloco"
     positions = [(0,0),(1,0),(0,1),(1,1),(0,2),(1,2),(0,3),(1,3)]  # até 8 por página
 
     count = 0
@@ -103,10 +100,9 @@ if st.session_state["caixas"] and st.button("📄 Gerar PDF + ZIP com QR Codes")
         count += 1
         if count % 8 == 0:
             c.showPage()
-    if count % 8 != 0:
-        c.showPage()
 
     c.save()
+    pdf_buffer.seek(0)
 
     # Criar ZIP
     zip_buffer = BytesIO()
@@ -115,9 +111,11 @@ if st.session_state["caixas"] and st.button("📄 Gerar PDF + ZIP com QR Codes")
         for img_path, _ in imagens_qr:
             with open(img_path, "rb") as f:
                 zipf.writestr(os.path.basename(img_path), f.read())
+    zip_buffer.seek(0)
 
     st.download_button(
         "📦 Baixar ZIP com QR Codes e PDF",
         zip_buffer.getvalue(),
         file_name="qrcodes_caixas.zip",
     )
+
