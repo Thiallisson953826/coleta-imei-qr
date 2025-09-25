@@ -2,86 +2,119 @@ import streamlit as st
 import qrcode
 import pandas as pd
 from io import BytesIO
-import zipfile
-from fpdf import FPDF
 import os
-import tempfile
+from zipfile import ZipFile
+from fpdf import FPDF
+import re
+
+# Pastas de saída
+os.makedirs("qrcodes", exist_ok=True)
 
 st.set_page_config(page_title="📱 Coleta IMEI - QR Code", layout="centered")
-st.title("📱 Gerador de QR Code para IMEIs")
 
-# Upload de arquivo Excel
-uploaded_file = st.file_uploader("📂 Envie sua planilha com IMEIs", type=["xlsx"])
+# Inicializar sessão
+if "caixas" not in st.session_state:
+    st.session_state["caixas"] = {}
+if "contador_caixa" not in st.session_state:
+    st.session_state["contador_caixa"] = 1
 
-if uploaded_file:
-    df = pd.read_excel(uploaded_file)
+st.title("📦 Coleta de IMEIs e Geração de QR Code")
 
-    if "IMEI" not in df.columns:
-        st.error("A planilha deve conter uma coluna chamada 'IMEI'")
-    else:
-        st.success("Planilha carregada com sucesso ✅")
+# Função para limpar IMEIs
+def limpar_imei(raw):
+    numeros = re.findall(r'\d+', raw)
+    return numeros
 
-        qr_codes = []
-        zip_buffer = BytesIO()
-        pdf = FPDF()
-        pdf.set_auto_page_break(auto=True, margin=10)
-        pdf.add_page()
+# Entrada de IMEIs
+imei_raw = st.text_area("📲 Digite ou cole IMEIs (um por linha ou todos juntos)")
+if st.button("➕ Adicionar IMEIs"):
+    if imei_raw:
+        novos_imeis = limpar_imei(imei_raw)
+        for imei in novos_imeis:
+            nome_caixa = f"Caixa_{st.session_state['contador_caixa']}"
+            if nome_caixa not in st.session_state["caixas"]:
+                st.session_state["caixas"][nome_caixa] = []
+            
+            st.session_state["caixas"][nome_caixa].append(imei)
 
-        # Posições para 6 QR Codes por página
-        x_positions = [20, 110]  # 2 colunas
-        y_positions = [20, 100, 180]  # 3 linhas
+            if len(st.session_state["caixas"][nome_caixa]) >= 50:
+                st.session_state["contador_caixa"] += 1
+        st.success(f"📲 {len(novos_imeis)} IMEIs adicionados com sucesso!")
 
-        i = 0
-        with zipfile.ZipFile(zip_buffer, "a", zipfile.ZIP_DEFLATED) as zip_file:
-            for idx, imei in enumerate(df["IMEI"]):
-                if pd.isna(imei):
-                    continue
+# Mostrar caixas e IMEIs
+for caixa, imeis in st.session_state["caixas"].items():
+    st.subheader(f"📦 {caixa} ({len(imeis)} IMEIs)")
+    st.text("\n".join(imeis))
 
-                # Gera QR Code
-                img = qrcode.make(str(imei))
-                img_buffer = BytesIO()
-                img.save(img_buffer, format="PNG")
-                img_buffer.seek(0)
+# Exportar para Excel
+if st.session_state["caixas"] and st.button("📊 Exportar todas as caixas para Excel"):
+    linhas = []
+    for caixa, imeis in st.session_state["caixas"].items():
+        for imei in imeis:
+            linhas.append({"Caixa": caixa, "IMEI": imei})
+    df = pd.DataFrame(linhas)
+    excel_buffer = BytesIO()
+    with pd.ExcelWriter(excel_buffer, engine="openpyxl") as writer:
+        df.to_excel(writer, index=False, sheet_name="IMEIs")
+    excel_buffer.seek(0)
+    st.download_button("📥 Baixar Excel", excel_buffer.getvalue(), file_name="imeis_coletados.xlsx")
 
-                # Salva no ZIP
-                zip_file.writestr(f"{imei}.png", img_buffer.getvalue())
+# Gerar PDF + ZIP com até 8 QR codes por página
+if st.session_state["caixas"] and st.button("📄 Gerar PDF + ZIP com QR Codes"):
+    caixas_selecionadas = list(st.session_state["caixas"].items())
+    imagens_qr = []
 
-                # Salva temporariamente para o PDF
-                with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as tmpfile:
-                    tmpfile.write(img_buffer.getvalue())
-                    tmp_path = tmpfile.name
+    # Gerar imagens QR
+    for caixa, imeis in caixas_selecionadas:
+        if not imeis:
+            continue
+        dados = "\n".join(imeis)
+        img = qrcode.make(dados)
+        img_path = f"qrcodes/{caixa}.png"
+        img.save(img_path)
+        imagens_qr.append((img_path, caixa))
 
-                # Adiciona ao PDF
-                x = x_positions[i % 2]
-                y = y_positions[(i // 2) % 3]
-                pdf.image(tmp_path, x=x, y=y, w=80, h=80)
+    # Criar PDF com FPDF
+    pdf = FPDF("P", "mm", "A4")
+    pdf.set_auto_page_break(auto=False)
+    pdf.add_page()
 
-                i += 1
+    qr_size = 60  # tamanho do QR
+    margin_x = 20
+    margin_y = 20
+    gap_x = 20
+    gap_y = 30
 
-                # Nova página a cada 6 QR Codes
-                if i % 6 == 0 and idx + 1 < len(df["IMEI"]):
-                    pdf.add_page()
+    positions = [(0,0),(1,0),(0,1),(1,1),(0,2),(1,2),(0,3),(1,3)]  # até 8 por página
 
-                # Remove imagem temporária
-                os.remove(tmp_path)
+    count = 0
+    for img_path, caixa_nome in imagens_qr:
+        if count % 8 == 0 and count > 0:
+            pdf.add_page()
+        pos = positions[count % 8]
+        x = margin_x + pos[0] * (qr_size + gap_x)
+        y = margin_y + pos[1] * (qr_size + gap_y)
+        pdf.image(img_path, x=x, y=y, w=qr_size, h=qr_size)
+        pdf.set_xy(x, y + qr_size + 2)
+        pdf.set_font("Arial", "B", 10)
+        pdf.cell(qr_size, 6, caixa_nome, align="C")
+        count += 1
 
-        # Exporta PDF
-        pdf_buffer = BytesIO()
-        pdf.output(pdf_buffer, "F")
-        pdf_buffer.seek(0)
+    # ⚡ Corrigido para gerar em memória
+    pdf_bytes = pdf.output(dest="S").encode("latin1")
+    pdf_buffer = BytesIO(pdf_bytes)
 
-        # Download ZIP
-        st.download_button(
-            label="📥 Baixar todas as imagens em ZIP",
-            data=zip_buffer,
-            file_name="qrcodes.zip",
-            mime="application/zip",
-        )
+    # Criar ZIP
+    zip_buffer = BytesIO()
+    with ZipFile(zip_buffer, "w") as zipf:
+        zipf.writestr("qrcodes.pdf", pdf_buffer.getvalue())
+        for img_path, _ in imagens_qr:
+            with open(img_path, "rb") as f:
+                zipf.writestr(os.path.basename(img_path), f.read())
+    zip_buffer.seek(0)
 
-        # Download PDF
-        st.download_button(
-            label="📥 Baixar PDF com QR Codes (6 por página)",
-            data=pdf_buffer,
-            file_name="qrcodes.pdf",
-            mime="application/pdf",
-        )
+    st.download_button(
+        "📦 Baixar ZIP com QR Codes e PDF",
+        zip_buffer.getvalue(),
+        file_name="qrcodes_caixas.zip",
+    )
