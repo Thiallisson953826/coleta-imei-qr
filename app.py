@@ -59,7 +59,7 @@ if st.session_state["caixas"] and st.button("📊 Exportar todas as caixas para 
     excel_buffer.seek(0)
     st.download_button("📥 Baixar Excel", excel_buffer.getvalue(), file_name="imeis_coletados.xlsx")
 
-# Gerar PDF + ZIP com até 8 QR codes por página
+# Gerar PDF + ZIP com até 6 QR codes por página
 if st.session_state["caixas"] and st.button("📄 Gerar PDF + ZIP com QR Codes"):
     caixas_selecionadas = list(st.session_state["caixas"].items())
     imagens_qr = []
@@ -72,7 +72,11 @@ if st.session_state["caixas"] and st.button("📄 Gerar PDF + ZIP com QR Codes")
         img = qrcode.make(dados)
         img_path = f"qrcodes/{caixa}.png"
         img.save(img_path)
-        imagens_qr.append((img_path, caixa))
+
+        # Guardar informações extra (quantidade e último IMEI)
+        qtd = len(imeis)
+        ultimo = imeis[-1] if imeis else ""
+        imagens_qr.append((img_path, caixa, qtd, ultimo))
 
     # Criar PDF com FPDF
     pdf = FPDF("P", "mm", "A4")
@@ -83,21 +87,27 @@ if st.session_state["caixas"] and st.button("📄 Gerar PDF + ZIP com QR Codes")
     margin_x = 20
     margin_y = 20
     gap_x = 20
-    gap_y = 30
+    gap_y = 50  # espaço maior pra caber os textos
 
-    positions = [(0,0),(1,0),(0,1),(1,1),(0,2),(1,2),(0,3),(1,3)]  # até 8 por página
+    # Posições para 6 QR codes (2 colunas × 3 linhas)
+    positions = [(0,0),(1,0),(0,1),(1,1),(0,2),(1,2)]  
 
     count = 0
-    for img_path, caixa_nome in imagens_qr:
-        if count % 8 == 0 and count > 0:
+    for img_path, caixa_nome, qtd, ultimo in imagens_qr:
+        if count % 6 == 0 and count > 0:
             pdf.add_page()
-        pos = positions[count % 8]
+        pos = positions[count % 6]
         x = margin_x + pos[0] * (qr_size + gap_x)
         y = margin_y + pos[1] * (qr_size + gap_y)
+
+        # Inserir QR Code
         pdf.image(img_path, x=x, y=y, w=qr_size, h=qr_size)
+
+        # Texto: Caixa + quantidade + último IMEI
         pdf.set_xy(x, y + qr_size + 2)
         pdf.set_font("Arial", "B", 10)
-        pdf.cell(qr_size, 6, caixa_nome, align="C")
+        pdf.multi_cell(qr_size, 5, f"{caixa_nome}\nQtd: {qtd}\nÚlt: {ultimo}", align="C")
+
         count += 1
 
     # ⚡ Corrigido para gerar em memória
@@ -108,7 +118,7 @@ if st.session_state["caixas"] and st.button("📄 Gerar PDF + ZIP com QR Codes")
     zip_buffer = BytesIO()
     with ZipFile(zip_buffer, "w") as zipf:
         zipf.writestr("qrcodes.pdf", pdf_buffer.getvalue())
-        for img_path, _ in imagens_qr:
+        for img_path, _, _, _ in imagens_qr:
             with open(img_path, "rb") as f:
                 zipf.writestr(os.path.basename(img_path), f.read())
     zip_buffer.seek(0)
