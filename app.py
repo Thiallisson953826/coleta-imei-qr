@@ -83,11 +83,11 @@ if st.session_state["caixas"] and st.button("📄 Gerar PDF + ZIP com QR Codes")
     pdf.set_auto_page_break(auto=False)
     pdf.add_page()
 
-    qr_size = 60  # tamanho do QR
+    qr_size = 55  # ajustado para caber na página
     margin_x = 20
     margin_y = 20
-    gap_x = 20
-    gap_y = 50  # espaço maior pra caber os textos
+    gap_x = 25
+    gap_y = 40  # ajustado para caber na página
 
     # Posições para 6 QR codes (2 colunas × 3 linhas)
     positions = [(0,0),(1,0),(0,1),(1,1),(0,2),(1,2)]  
@@ -105,7 +105,7 @@ if st.session_state["caixas"] and st.button("📄 Gerar PDF + ZIP com QR Codes")
 
         # Texto: Caixa + quantidade + último IMEI
         pdf.set_xy(x, y + qr_size + 2)
-        pdf.set_font("Arial", "B", 10)
+        pdf.set_font("Arial", "B", 9)
         pdf.multi_cell(qr_size, 5, f"{caixa_nome}\nQtd: {qtd}\nÚlt: {ultimo}", align="C")
 
         count += 1
