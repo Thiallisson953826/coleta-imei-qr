@@ -17,26 +17,30 @@ if "caixas" not in st.session_state:
     st.session_state["caixas"] = {}
 if "contador_caixa" not in st.session_state:
     st.session_state["contador_caixa"] = 1
+if "nce" not in st.session_state:
+    st.session_state["nce"] = ""
+if "nota" not in st.session_state:
+    st.session_state["nota"] = ""
 
 st.title("📦 Coleta de IMEIs e Geração de QR Code")
 
-# ----- NOVO: Campos NCE e Nota (antes de adicionar IMEIs) -----
+# ----- CAMPOS NCE E NOTA -----
 col_nce, col_nota = st.columns(2)
 with col_nce:
-    nce_val = st.text_input("📋 NCE do Produto", value="")
+    st.session_state["nce"] = st.text_input("📋 NCE do Produto", value=st.session_state["nce"])
 with col_nota:
-    nota_val = st.text_input("🧾 Nota Fiscal", value="")
+    st.session_state["nota"] = st.text_input("🧾 Nota Fiscal", value=st.session_state["nota"])
 
 # Função para limpar IMEIs
 def limpar_imei(raw):
     numeros = re.findall(r'\d+', raw)
     return numeros
 
-# --- BOTÃO PDF/ZIP no TOPO ESQUERDO (aparece só se já houver caixas) ---
+# --- BOTÃO PDF/ZIP FIXO NO TOPO ESQUERDO (visível se houver IMEIs) ---
 if st.session_state["caixas"]:
     left_col, _ = st.columns([1, 8])
     with left_col:
-        if st.button("📄 Gerar PDF + ZIP com QR Codes"):
+        if st.button("📄 Gerar PDF + ZIP com QR Codes", key="btn_pdf_topo"):
             caixas_selecionadas = list(st.session_state["caixas"].items())
             imagens_qr = []
 
@@ -49,32 +53,28 @@ if st.session_state["caixas"]:
                 img_path = f"qrcodes/{caixa}.png"
                 img.save(img_path)
 
-                # Guardar informações extra (quantidade e último IMEI)
                 qtd = len(imeis)
                 ultimo = imeis[-1] if imeis else ""
                 imagens_qr.append((img_path, caixa, qtd, ultimo))
 
-            # Criar PDF com FPDF
+            # Criar PDF
             pdf = FPDF("P", "mm", "A4")
             pdf.set_auto_page_break(auto=False)
             pdf.add_page()
 
-            # Cabeçalho com NCE e Nota em todas as páginas
+            # Cabeçalho com NCE e Nota
             def add_header():
                 pdf.set_font("Arial", "B", 12)
-                header_text = f"NCE: {nce_val}    Nota: {nota_val}"
+                header_text = f"NCE: {st.session_state['nce']}    Nota: {st.session_state['nota']}"
                 pdf.cell(0, 10, header_text, 0, 1, "C")
                 pdf.ln(5)
-
             add_header()
 
-            qr_size = 55  # ajustado para caber na página
+            qr_size = 55
             margin_x = 20
             margin_y = 20
             gap_x = 25
-            gap_y = 40  # ajustado para caber na página
-
-            # Posições para 6 QR codes (2 colunas × 3 linhas)
+            gap_y = 40
             positions = [(0,0),(1,0),(0,1),(1,1),(0,2),(1,2)]
 
             count = 0
@@ -86,10 +86,7 @@ if st.session_state["caixas"]:
                 x = margin_x + pos[0] * (qr_size + gap_x)
                 y = margin_y + pos[1] * (qr_size + gap_y)
 
-                # Inserir QR Code
                 pdf.image(img_path, x=x, y=y, w=qr_size, h=qr_size)
-
-                # Texto: Caixa + quantidade + último IMEI
                 pdf.set_xy(x, y + qr_size + 2)
                 pdf.set_font("Arial", "B", 9)
                 pdf.multi_cell(qr_size, 5, f"{caixa_nome}\nQtd: {qtd}\nÚlt: {ultimo}", align="C")
@@ -100,7 +97,7 @@ if st.session_state["caixas"]:
             pdf_bytes = pdf.output(dest="S").encode("latin1")
             pdf_buffer = BytesIO(pdf_bytes)
 
-            # Criar ZIP em memória
+            # Criar ZIP
             zip_buffer = BytesIO()
             with ZipFile(zip_buffer, "w") as zipf:
                 zipf.writestr("qrcodes.pdf", pdf_buffer.getvalue())
@@ -119,19 +116,18 @@ st.divider()
 
 # Entrada de IMEIs
 imei_raw = st.text_area("📲 Digite ou cole IMEIs (um por linha ou todos juntos)")
-if st.button("➕ Adicionar IMEIs"):
+if st.button("➕ Adicionar IMEIs", key="btn_add_imeis"):
     if imei_raw:
         novos_imeis = limpar_imei(imei_raw)
         for imei in novos_imeis:
             nome_caixa = f"Caixa_{st.session_state['contador_caixa']}"
             if nome_caixa not in st.session_state["caixas"]:
                 st.session_state["caixas"][nome_caixa] = []
-            
             st.session_state["caixas"][nome_caixa].append(imei)
-
             if len(st.session_state["caixas"][nome_caixa]) >= 50:
                 st.session_state["contador_caixa"] += 1
         st.success(f"📲 {len(novos_imeis)} IMEIs adicionados com sucesso!")
+        st.rerun()  # <-- faz o botão de gerar PDF aparecer imediatamente
 
 # Mostrar caixas e IMEIs
 for caixa, imeis in st.session_state["caixas"].items():
@@ -139,11 +135,16 @@ for caixa, imeis in st.session_state["caixas"].items():
     st.text("\n".join(imeis))
 
 # Exportar para Excel
-if st.session_state["caixas"] and st.button("📊 Exportar todas as caixas para Excel"):
+if st.session_state["caixas"] and st.button("📊 Exportar todas as caixas para Excel", key="btn_excel"):
     linhas = []
     for caixa, imeis in st.session_state["caixas"].items():
         for imei in imeis:
-            linhas.append({"NCE": nce_val, "Nota Fiscal": nota_val, "Caixa": caixa, "IMEI": imei})
+            linhas.append({
+                "NCE": st.session_state["nce"],
+                "Nota Fiscal": st.session_state["nota"],
+                "Caixa": caixa,
+                "IMEI": imei
+            })
     df = pd.DataFrame(linhas)
     excel_buffer = BytesIO()
     with pd.ExcelWriter(excel_buffer, engine="openpyxl") as writer:
