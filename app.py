@@ -1,3 +1,9 @@
+# ============================================
+# TH PROGRAMAÇÃO
+# Sistema de Coleta de IMEI com QR Code
+# Produzido por Thiallisson
+# ============================================
+
 import streamlit as st
 import qrcode
 import pandas as pd
@@ -10,7 +16,24 @@ import re
 # Pastas de saída
 os.makedirs("qrcodes", exist_ok=True)
 
-st.set_page_config(page_title="📱 Coleta IMEI - QR Code", layout="centered")
+st.set_page_config(
+    page_title="TH PROGRAMAÇÃO | Coleta IMEI",
+    layout="centered"
+)
+
+# ====== MARCA NO TOPO ======
+st.markdown(
+    """
+    <div style="text-align:center; padding:10px;">
+        <h2 style="margin-bottom:0;">TH PROGRAMAÇÃO</h2>
+        <span style="font-size:14px; color:#666;">
+            Produzido por Thiallisson
+        </span>
+        <hr>
+    </div>
+    """,
+    unsafe_allow_html=True
+)
 
 # Inicializar sessão
 if "caixas" not in st.session_state:
@@ -27,25 +50,28 @@ st.title("📦 Coleta de IMEIs e Geração de QR Code")
 # ----- CAMPOS NCE E NOTA -----
 col_nce, col_nota = st.columns(2)
 with col_nce:
-    st.session_state["nce"] = st.text_input("📋 NCE do Produto", value=st.session_state["nce"])
+    st.session_state["nce"] = st.text_input(
+        "📋 NCE do Produto",
+        value=st.session_state["nce"]
+    )
 with col_nota:
-    st.session_state["nota"] = st.text_input("🧾 Nota Fiscal", value=st.session_state["nota"])
+    st.session_state["nota"] = st.text_input(
+        "🧾 Nota Fiscal",
+        value=st.session_state["nota"]
+    )
 
 # Função para limpar IMEIs
 def limpar_imei(raw):
-    numeros = re.findall(r'\d+', raw)
-    return numeros
+    return re.findall(r'\d+', raw)
 
-# --- BOTÃO PDF/ZIP FIXO NO TOPO ESQUERDO (visível se houver IMEIs) ---
+# ----- BOTÃO PDF + ZIP -----
 if st.session_state["caixas"]:
     left_col, _ = st.columns([1, 8])
     with left_col:
-        if st.button("📄 Gerar PDF + ZIP com QR Codes", key="btn_pdf_topo"):
-            caixas_selecionadas = list(st.session_state["caixas"].items())
+        if st.button("📄 Gerar PDF + ZIP"):
             imagens_qr = []
 
-            # Gerar imagens QR
-            for caixa, imeis in caixas_selecionadas:
+            for caixa, imeis in st.session_state["caixas"].items():
                 if not imeis:
                     continue
                 dados = "\n".join(imeis)
@@ -53,89 +79,129 @@ if st.session_state["caixas"]:
                 img_path = f"qrcodes/{caixa}.png"
                 img.save(img_path)
 
-                qtd = len(imeis)
-                ultimo = imeis[-1] if imeis else ""
-                imagens_qr.append((img_path, caixa, qtd, ultimo))
+                imagens_qr.append(
+                    (img_path, caixa, len(imeis), imeis[-1])
+                )
 
-            # Criar PDF
+            # ===== CRIAR PDF =====
             pdf = FPDF("P", "mm", "A4")
             pdf.set_auto_page_break(auto=False)
-            pdf.add_page()
 
-            # Cabeçalho com NCE e Nota
             def add_header():
                 pdf.set_font("Arial", "B", 12)
-                header_text = f"NCE: {st.session_state['nce']}    Nota: {st.session_state['nota']}"
-                pdf.cell(0, 10, header_text, 0, 1, "C")
-                pdf.ln(5)
+                pdf.cell(
+                    0,
+                    8,
+                    f"NCE: {st.session_state['nce']}    Nota: {st.session_state['nota']}",
+                    0,
+                    1,
+                    "C"
+                )
+                pdf.set_font("Arial", "I", 8)
+                pdf.cell(
+                    0,
+                    6,
+                    "TH PROGRAMAÇÃO - Produzido por Thiallisson",
+                    0,
+                    1,
+                    "C"
+                )
+                pdf.ln(3)
+
+            pdf.add_page()
             add_header()
 
             qr_size = 55
             margin_x = 20
-            margin_y = 20
+            margin_y = 25
             gap_x = 25
             gap_y = 40
             positions = [(0,0),(1,0),(0,1),(1,1),(0,2),(1,2)]
 
             count = 0
-            for img_path, caixa_nome, qtd, ultimo in imagens_qr:
+            for img_path, caixa, qtd, ultimo in imagens_qr:
                 if count % 6 == 0 and count > 0:
                     pdf.add_page()
                     add_header()
+
                 pos = positions[count % 6]
                 x = margin_x + pos[0] * (qr_size + gap_x)
                 y = margin_y + pos[1] * (qr_size + gap_y)
 
-                pdf.image(img_path, x=x, y=y, w=qr_size, h=qr_size)
+                pdf.image(img_path, x=x, y=y, w=qr_size)
                 pdf.set_xy(x, y + qr_size + 2)
                 pdf.set_font("Arial", "B", 9)
-                pdf.multi_cell(qr_size, 5, f"{caixa_nome}\nQtd: {qtd}\nÚlt: {ultimo}", align="C")
+                pdf.multi_cell(
+                    qr_size,
+                    5,
+                    f"{caixa}\nQtd: {qtd}\nÚlt: {ultimo}",
+                    align="C"
+                )
 
                 count += 1
 
-            # Gerar PDF em memória
-            pdf_bytes = pdf.output(dest="S").encode("latin1")
-            pdf_buffer = BytesIO(pdf_bytes)
+            # Rodapé fixo
+            pdf.set_y(-15)
+            pdf.set_font("Arial", "I", 8)
+            pdf.cell(
+                0,
+                10,
+                "TH PROGRAMAÇÃO © Produzido por Thiallisson",
+                0,
+                0,
+                "C"
+            )
 
-            # Criar ZIP
+            pdf_bytes = pdf.output(dest="S").encode("latin1")
+
+            # ===== ZIP =====
             zip_buffer = BytesIO()
             with ZipFile(zip_buffer, "w") as zipf:
-                zipf.writestr("qrcodes.pdf", pdf_buffer.getvalue())
+                zipf.writestr(
+                    "TH_PROGRAMACAO_QRCODES.pdf",
+                    pdf_bytes
+                )
                 for img_path, _, _, _ in imagens_qr:
                     with open(img_path, "rb") as f:
-                        zipf.writestr(os.path.basename(img_path), f.read())
+                        zipf.writestr(
+                            os.path.basename(img_path),
+                            f.read()
+                        )
+
             zip_buffer.seek(0)
 
             st.download_button(
-                "📦 Baixar ZIP com QR Codes e PDF",
+                "📦 Baixar ZIP",
                 zip_buffer.getvalue(),
-                file_name="qrcodes_caixas.zip",
+                file_name="TH_PROGRAMACAO_QRCODES_IMEI.zip"
             )
 
 st.divider()
 
-# Entrada de IMEIs
-imei_raw = st.text_area("📲 Digite ou cole IMEIs (um por linha ou todos juntos)")
-if st.button("➕ Adicionar IMEIs", key="btn_add_imeis"):
+# ----- ENTRADA IMEI -----
+imei_raw = st.text_area(
+    "📲 Digite ou cole IMEIs (um por linha ou todos juntos)"
+)
+
+if st.button("➕ Adicionar IMEIs"):
     if imei_raw:
         novos_imeis = limpar_imei(imei_raw)
         for imei in novos_imeis:
-            nome_caixa = f"Caixa_{st.session_state['contador_caixa']}"
-            if nome_caixa not in st.session_state["caixas"]:
-                st.session_state["caixas"][nome_caixa] = []
-            st.session_state["caixas"][nome_caixa].append(imei)
-            if len(st.session_state["caixas"][nome_caixa]) >= 50:
+            caixa = f"Caixa_{st.session_state['contador_caixa']}"
+            st.session_state["caixas"].setdefault(caixa, []).append(imei)
+            if len(st.session_state["caixas"][caixa]) >= 50:
                 st.session_state["contador_caixa"] += 1
-        st.success(f"📲 {len(novos_imeis)} IMEIs adicionados com sucesso!")
-        st.rerun()  # <-- faz o botão de gerar PDF aparecer imediatamente
 
-# Mostrar caixas e IMEIs
+        st.success(f"{len(novos_imeis)} IMEIs adicionados com sucesso!")
+        st.rerun()
+
+# ----- EXIBIR CAIXAS -----
 for caixa, imeis in st.session_state["caixas"].items():
     st.subheader(f"📦 {caixa} ({len(imeis)} IMEIs)")
     st.text("\n".join(imeis))
 
-# Exportar para Excel
-if st.session_state["caixas"] and st.button("📊 Exportar todas as caixas para Excel", key="btn_excel"):
+# ----- EXCEL -----
+if st.session_state["caixas"] and st.button("📊 Exportar Excel"):
     linhas = []
     for caixa, imeis in st.session_state["caixas"].items():
         for imei in imeis:
@@ -143,11 +209,18 @@ if st.session_state["caixas"] and st.button("📊 Exportar todas as caixas para 
                 "NCE": st.session_state["nce"],
                 "Nota Fiscal": st.session_state["nota"],
                 "Caixa": caixa,
-                "IMEI": imei
+                "IMEI": imei,
+                "Sistema": "TH PROGRAMAÇÃO - Produzido por Thiallisson"
             })
+
     df = pd.DataFrame(linhas)
-    excel_buffer = BytesIO()
-    with pd.ExcelWriter(excel_buffer, engine="openpyxl") as writer:
-        df.to_excel(writer, index=False, sheet_name="IMEIs")
-    excel_buffer.seek(0)
-    st.download_button("📥 Baixar Excel", excel_buffer.getvalue(), file_name="imeis_coletados.xlsx")
+    buffer = BytesIO()
+    with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
+        df.to_excel(writer, index=False)
+
+    buffer.seek(0)
+    st.download_button(
+        "📥 Baixar Excel",
+        buffer.getvalue(),
+        file_name="TH_PROGRAMACAO_IMEIS.xlsx"
+    )
