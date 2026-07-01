@@ -21,6 +21,23 @@ st.set_page_config(
     layout="centered"
 )
 
+
+# ===== LOGIN =====
+SENHA="TH2026"
+if "autenticado" not in st.session_state:
+    st.session_state["autenticado"]=False
+if not st.session_state["autenticado"]:
+    st.title("🔒 TH PROGRAMAÇÃO")
+    senha=st.text_input("Senha",type="password")
+    if st.button("Entrar"):
+        if senha==SENHA:
+            st.session_state["autenticado"]=True
+            st.rerun()
+        else:
+            st.error("Senha incorreta!")
+    st.stop()
+
+
 # ====== MARCA NO TOPO ======
 st.markdown(
     """
