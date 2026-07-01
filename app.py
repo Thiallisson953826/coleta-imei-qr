@@ -27,16 +27,24 @@ SENHA="TH2026"
 if "autenticado" not in st.session_state:
     st.session_state["autenticado"]=False
 if not st.session_state["autenticado"]:
-    st.title("🔒 TH PROGRAMAÇÃO")
+    st.markdown("""
+    <h1 style='color:red;text-align:center;'>ATENÇÃO</h1>
+    <div style="border:2px solid red;background:#fff3cd;padding:15px;border-radius:10px">
+    <b>O aplicativo de geração de QR Code foi utilizado apenas de forma temporária durante a correção do sistema principal de leitura das caixas dos fornecedores.<br><br>
+    A PARTIR DE AGORA, ESTE APLICATIVO NÃO DEVE MAIS SER UTILIZADO.<br><br>
+    LEIA EXCLUSIVAMENTE O CÓDIGO ORIGINAL DA CAIXA DO FORNECEDOR.<br><br>
+    <span style='color:red;font-size:20px'>A GERAÇÃO DE NOVOS QR CODES ESTÁ PROIBIDA.</span><br><br>
+    Utilize somente o código impresso na caixa do fornecedor.</b>
+    </div>
+    """,unsafe_allow_html=True)
     senha=st.text_input("Senha",type="password")
     if st.button("Entrar"):
         if senha==SENHA:
             st.session_state["autenticado"]=True
             st.rerun()
         else:
-            st.error("Senha incorreta!")
+            st.error("Senha incorreta")
     st.stop()
-
 
 # ====== MARCA NO TOPO ======
 st.markdown(
